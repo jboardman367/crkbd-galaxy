@@ -1,5 +1,11 @@
 #include QMK_KEYBOARD_H
 #include <stdio.h>
+#include "symbolnames.h"
+
+
+enum my_keycodes {
+	STRINPT = SAFE_RANGE
+};
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	[0] = LAYOUT_split_3x6_3(
@@ -19,7 +25,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 ), [2] = LAYOUT_split_3x6_3(
 
 	    KC_LGUI, CG_TOGG,   KC_F7,   KC_F8,   KC_F9,  KC_F12,          KC_HOME, LCA(KC_DOWN), LCA(KC_UP),  KC_END, XXXXXXX, KC_DEL,
-			 KC_TAB, XXXXXXX,   KC_F4,   KC_F5,   KC_F6,  KC_F11,          KC_LEFT, KC_DOWN,   KC_UP, KC_RGHT, XXXXXXX,  KC_ESC,
+			 KC_TAB, XXXXXXX,   KC_F4,   KC_F5,   KC_F6,  KC_F11,          KC_LEFT, KC_DOWN,   KC_UP, KC_RGHT, XXXXXXX,  STRINPT,
 			KC_LSFT, LSFT(KC_LGUI), KC_F1, KC_F2, KC_F3,  KC_F10,          XXXXXXX, KC_PGDN, KC_PGUP, XXXXXXX, XXXXXXX, KC_PSCR,
 			                           KC_LCTL,  KC_SPC, _______,          KC_RCTL,  KC_ENT, KC_RALT
 
@@ -52,6 +58,11 @@ void oled_render_layer_state(void) {
 }
 
 
+bool is_strinpt_mode = false;
+uint8_t strinpt_ind = 0;
+char strinpt_buf[21] = { };
+bool shift_down = false;
+
 char keylog_str[24] = {};
 
 const char code_to_name[60] = {
@@ -64,8 +75,6 @@ const char code_to_name[60] = {
 
 void set_keylog(uint16_t keycode, keyrecord_t *record) {
   char name = ' ';
-    if ((keycode >= QK_MOD_TAP && keycode <= QK_MOD_TAP_MAX) ||
-        (keycode >= QK_LAYER_TAP && keycode <= QK_LAYER_TAP_MAX)) { keycode = keycode & 0xFF; }
   if (keycode < 60) {
     name = code_to_name[keycode];
   }
@@ -114,10 +123,74 @@ bool oled_task_user(void) {
     return false;
 }
 
+void append_to_strinpt(uint16_t keycode) {
+	if (keycode >= KC_A && keycode <= KC_Z && strinpt_ind < 20) {
+		strinpt_buf[strinpt_ind] = shift_down ? keycode + 61 : keycode + 93;
+		strinpt_ind++;
+	}
+	else if (keycode == KC_BACKSPACE && strinpt_ind) {
+		strinpt_ind--;
+		strinpt_buf[strinpt_ind] = 0;
+	}
+	else if (keycode >= KC_1 && keycode <= KC_SLASH && keycode != KC_ENTER && strinpt_ind < 20) {
+		strinpt_buf[strinpt_ind] = code_to_name[keycode];
+		strinpt_ind++;
+	}
+	snprintf(keylog_str, sizeof(keylog_str), "|%-20s", strinpt_buf);
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-  if (record->event.pressed) {
-    set_keylog(keycode, record);
-  }
-  return true;
+    if (keycode == MO(1) || keycode == MO(2)) {
+        // Allow layer shifts to still be handled normally
+        return true;
+    }
+
+    if ((keycode >= QK_MOD_TAP && keycode <= QK_MOD_TAP_MAX) ||
+        (keycode >= QK_LAYER_TAP && keycode <= QK_LAYER_TAP_MAX)) { keycode = keycode & 0xFF; }
+
+	if (!is_strinpt_mode) {
+		switch (keycode) {
+			case STRINPT:
+				if (record->event.pressed) {
+					is_strinpt_mode = true;
+					memset(&strinpt_buf[0], 0, sizeof(strinpt_buf));
+                    strinpt_ind = 0;
+					shift_down = false;
+					return false;
+				}
+			default:
+				if (record->event.pressed) {
+					set_keylog(keycode, record);
+				}
+		}
+		return true;
+
+	} else { // strinpt
+		if (record->event.pressed) {
+			switch (keycode) {
+
+				case KC_ESC:
+					is_strinpt_mode = false;
+
+				case KC_ENT:
+					process_symbol_name(strinpt_buf);
+                    is_strinpt_mode = false;
+
+				case KC_LEFT_SHIFT:
+				case KC_RIGHT_SHIFT:
+					shift_down = true;
+
+				default:
+					append_to_strinpt(keycode);
+			}
+		} else {
+			switch (keycode) {
+				case KC_RIGHT_SHIFT:
+				case KC_LEFT_SHIFT:
+					shift_down = false;
+		    }
+		}
+		return false;
+	}
 }
 #endif
