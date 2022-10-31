@@ -3,6 +3,37 @@
 #include "symbolnames.h"
 
 
+typedef enum {
+    TD_NONE,
+    TD_UNKNOWN,
+    TD_SINGLE_TAP,
+    TD_SINGLE_HOLD,
+    TD_DOUBLE_TAP,
+    TD_DOUBLE_SINGLE_TAP,
+    TD_DOUBLE_HOLD,
+} td_state_t;
+
+typedef struct {
+    bool is_press_action;
+    td_state_t state;
+} td_tap_t;
+
+
+// Tapdance enums
+enum {
+    LAYER_DANCE,
+    ALT_DANCE,
+    CTRL_DANCE,
+    DEL_DANCE,
+};
+
+// Forward declare for use in keymap
+td_state_t cur_dance(qk_tap_dance_state_t *state);
+
+void layer_td_finished(qk_tap_dance_state_t *state, void *user_data);
+void layer_td_reset(qk_tap_dance_state_t *state, void *user_data);
+
+
 enum my_keycodes {
 	STRINPT = SAFE_RANGE
 };
@@ -10,24 +41,24 @@ enum my_keycodes {
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	[0] = LAYOUT_split_3x6_3(
 
-			KC_LGUI,    KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,            KC_Y,     KC_U,    KC_I,    KC_O,    KC_P, KC_BSPC,
+			KC_LGUI,    KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,            KC_Y,     KC_U,    KC_I,    KC_O,    KC_P, TD(DEL_DANCE),
 			 KC_TAB,    KC_A,    KC_S,    KC_D,    KC_F,    KC_G,            KC_H,     KC_J,    KC_K,    KC_L, KC_SCLN, KC_QUOT,
 			KC_LSFT,    KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,            KC_N,     KC_M, KC_COMM,  KC_DOT, KC_SLSH, KC_RSFT,
-			                           KC_LCTL,  KC_SPC,   MO(2),            MO(1),  KC_ENT, KC_RALT
+			                 TD(CTRL_DANCE),  KC_SPC,   TD(LAYER_DANCE),            TD(LAYER_DANCE),  KC_ENT, TD(ALT_DANCE)
 
 ), [1] = LAYOUT_split_3x6_3(
 
-			KC_LGUI, XXXXXXX,    KC_7,    KC_8,    KC_9, KC_EXLM,           KC_GRV, KC_LCBR, KC_RCBR, KC_CIRC, KC_AMPR, KC_BSPC,
+			KC_LGUI, XXXXXXX,    KC_7,    KC_8,    KC_9, KC_EXLM,           KC_GRV, KC_LCBR, KC_RCBR, KC_CIRC, KC_AMPR, _______,
 			 KC_TAB,    KC_0,    KC_4,    KC_5,    KC_6, KC_ASTR,           KC_EQL, KC_LPRN, KC_RPRN, KC_UNDS, KC_PIPE,  KC_ESC,
 			KC_LSFT, XXXXXXX,    KC_1,    KC_2,    KC_3, KC_SLSH,          KC_MINS, KC_LBRC, KC_RBRC, XXXXXXX, KC_BSLS, KC_RSFT,
-			                           KC_LCTL,  KC_SPC, KC_LALT,          _______,  KC_ENT, KC_RALT
+			                           _______,  _______, _______,          _______,  _______, _______
 
 ), [2] = LAYOUT_split_3x6_3(
 
-	    KC_LGUI, CG_TOGG,   KC_F7,   KC_F8,   KC_F9,  KC_F12,          KC_HOME, LCA(KC_DOWN), LCA(KC_UP),  KC_END, XXXXXXX, KC_DEL,
+	    KC_LGUI, CG_TOGG,   KC_F7,   KC_F8,   KC_F9,  KC_F12,          KC_HOME, LCA(KC_DOWN), LCA(KC_UP),  KC_END, XXXXXXX, _______,
 			 KC_TAB, XXXXXXX,   KC_F4,   KC_F5,   KC_F6,  KC_F11,          KC_LEFT, KC_DOWN,   KC_UP, KC_RGHT, XXXXXXX,  STRINPT,
 			KC_LSFT, LSFT(KC_LGUI), KC_F1, KC_F2, KC_F3,  KC_F10,          XXXXXXX, KC_PGDN, KC_PGUP, XXXXXXX, XXXXXXX, KC_PSCR,
-			                           KC_LCTL,  KC_SPC, _______,          KC_RCTL,  KC_ENT, KC_RALT
+			                           _______,  _______, _______,          _______,  _______, _______
 
 )};
 
@@ -193,4 +224,93 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 		return false;
 	}
 }
-#endif
+#endif  // OLED_ENABLE
+
+td_state_t cur_dance(qk_tap_dance_state_t *state) {
+    if (state->count == 1) {
+        if (!state->pressed) {
+            return TD_SINGLE_TAP;
+        }
+        // Key still held
+        return TD_SINGLE_HOLD;
+    }
+    else if (state->count == 2) {
+        if (state->pressed) {
+            return TD_DOUBLE_HOLD;
+        }
+        else {
+            return TD_DOUBLE_TAP;
+        }
+    }
+    return TD_UNKNOWN;
+}
+
+// Static state for layer dance
+static td_tap_t layer_tap_state = {
+    .is_press_action = true,
+    .state = TD_NONE
+};
+
+void layer_td_finished(qk_tap_dance_state_t *state, void *user_data) {
+    layer_tap_state.state = cur_dance(state);
+    switch (layer_tap_state.state) {
+        case TD_SINGLE_TAP:
+            // If a higher layer is off, turn all off
+            if (layer_state_is(2)) {
+                layer_off(2);
+                layer_off(1);
+            }
+            else if (layer_state_is(1)) {
+                // Already on, turn off
+                layer_off(1);
+            }
+            else {
+                // Off, turn it on
+                layer_on(1);
+            }
+            break;
+
+        case TD_SINGLE_HOLD:
+            layer_on(1);
+            break;
+
+        case TD_DOUBLE_TAP:
+            if (layer_state_is(2)) {
+                // Already on, turn off
+                layer_off(2);
+                layer_off(1);
+            }
+            else {
+                // Off, turn it on
+                layer_on(2);
+            }
+            break;
+
+        case TD_DOUBLE_HOLD:
+            layer_on(2);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void layer_td_reset(qk_tap_dance_state_t *state, void *user_data) {
+    // If the key was held down and is released, switch layer off
+    if (layer_tap_state.state == TD_SINGLE_HOLD) {
+        layer_off(2);
+        layer_off(1);
+    }
+    if (layer_tap_state.state == TD_DOUBLE_HOLD) {
+        layer_off(2);
+        layer_off(1);
+    }
+    layer_tap_state.state = TD_NONE;
+}
+
+qk_tap_dance_action_t tap_dance_actions[] = {
+    [LAYER_DANCE] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, layer_td_finished, layer_td_reset),
+    [ALT_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_LALT, KC_RALT),
+    [CTRL_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_LCTL, KC_RCTL),
+    [DEL_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_BSPC, KC_DEL)
+};

@@ -4,5 +4,6 @@ OLED_ENABLE     = yes
 OLED_DRIVER     = SSD1306
 LTO_ENABLE      = yes
 UNICODE_ENABLE = yes
+TAP_DANCE_ENABLE = yes
 SRC += symbolnames.c
 CONSOLE_ENABLE = no
