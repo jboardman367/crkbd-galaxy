@@ -24,7 +24,6 @@ enum {
     LAYER_DANCE,
     ALT_DANCE,
     CTRL_DANCE,
-    DEL_DANCE,
 };
 
 // Forward declare for use in keymap
@@ -41,7 +40,7 @@ enum my_keycodes {
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 	[0] = LAYOUT_split_3x6_3(
 
-			KC_LGUI,    KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,            KC_Y,     KC_U,    KC_I,    KC_O,    KC_P, TD(DEL_DANCE),
+			KC_LGUI,    KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,            KC_Y,     KC_U,    KC_I,    KC_O,    KC_P, KC_BSPC,
 			 KC_TAB,    KC_A,    KC_S,    KC_D,    KC_F,    KC_G,            KC_H,     KC_J,    KC_K,    KC_L, KC_SCLN, KC_QUOT,
 			KC_LSFT,    KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,            KC_N,     KC_M, KC_COMM,  KC_DOT, KC_SLSH, KC_RSFT,
 			                 TD(CTRL_DANCE),  KC_SPC,   TD(LAYER_DANCE),            TD(LAYER_DANCE),  KC_ENT, TD(ALT_DANCE)
@@ -312,5 +311,12 @@ qk_tap_dance_action_t tap_dance_actions[] = {
     [LAYER_DANCE] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, layer_td_finished, layer_td_reset),
     [ALT_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_LALT, KC_RALT),
     [CTRL_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_LCTL, KC_RCTL),
-    [DEL_DANCE] = ACTION_TAP_DANCE_DOUBLE(KC_BSPC, KC_DEL)
+};
+
+// Overrides
+const key_override_t delete_key_override = ko_make_basic(MOD_MASK_SHIFT, KC_BSPC, KC_DEL);
+
+const key_override_t **key_overrides = (const key_override_t *[]){
+    &delete_key_override,
+    NULL
 };
